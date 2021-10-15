@@ -135,6 +135,11 @@ def city_can_build_cart_or_worker(player):
         return True
     return False
 
+def is_nighttime(turn):
+    if 30 <= turn % 40 <= 39:
+        return True
+    return False
+
 game_state = None
 def agent(observation, configuration):
     global game_state
@@ -176,13 +181,21 @@ def agent(observation, configuration):
                     actions.append(action)
                 else:
                     closest_city_tile = find_closest_city_tile(unit.pos, player)
-                    move_direction = unit.pos.direction_to(closest_city_tile.pos)
-                    action = unit.move(move_direction)
-                    unit_positions.append(unit.pos.translate(move_direction, 1))
-                    actions.append(action)
+                    if closest_city_tile is None:
+                        actions.append(unit.build_city())
+                    else:
+                        move_direction = unit.pos.direction_to(closest_city_tile.pos)
+                        action = unit.move(move_direction)
+                        unit_positions.append(unit.pos.translate(move_direction, 1))
+                        actions.append(action)
             else:
                 lowest_fuel_city, lowest_fuel = get_city_with_least_fuel(player.cities)
-                if lowest_fuel <= 230:
+                if lowest_fuel_city is None:    # there are no CityTiles, should build one ASAP
+                    if unit.can_build(game_state.map) and is_nighttime(game_state.turn):
+                        actions.append(unit.build_city())
+                    else:
+                        break
+                elif lowest_fuel <= 230:
                     action = unit.move(unit.pos.direction_to(lowest_fuel_city.citytiles[0].pos))
                     actions.append(action)
                 elif unit.pos.distance_to(lowest_fuel_city.citytiles[0].pos) > 0.25 * game_state.map_height:

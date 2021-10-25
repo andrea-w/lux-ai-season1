@@ -92,7 +92,9 @@ def find_closest_city_tile(pos, player):
     return closest_city_tile
 
 # returns boolean
-def should_build_another_citytile(player):
+def should_build_another_citytile(player, turn):
+    if is_nighttime(turn):
+        return False
     total_citytiles = 0
     for city in player.cities.values():
         total_citytiles += len(city.citytiles)
@@ -127,7 +129,9 @@ def pick_random_direction():
     elif meh == 4:
         return Constants.DIRECTIONS.WEST
 
-def city_can_build_cart_or_worker(player):
+def city_can_build_cart_or_worker(player, turn):
+    if is_nighttime(turn):
+        return False
     total_citytiles = 0
     for c in player.cities.values():
         total_citytiles += len(c.citytiles)
@@ -169,8 +173,19 @@ def agent(observation, configuration):
     for unit in player.units:
         # if the unit is a worker (can mine resources) and can perform an action this turn
         if unit.is_worker() and unit.can_act():
+            if is_nighttime(game_state.turn):
+                closest_city_tile = find_closest_city_tile(unit.pos, player)
+                # if it only requires one move to get to a CityTile, worker should move there
+                if unit.pos.distance_to(closest_city_tile.pos) <= 1:
+                    move_direction = unit.pos.direction_to(closest_city_tile.pos)
+                    actions.append(unit.move(move_direction))
+                # else it's best that the worker does nothing until it's daytime again
+                else:
+                    # janky way of blocking the unit from performing any other actions - "move" to its current pos
+                    move_direction = unit.pos.direction_to(unit.pos)
+                    actions.append(unit.move(move_direction))
             # we want to mine only if there is space left in the worker's cargo
-            if unit.get_cargo_space_left() > 0:
+            elif unit.get_cargo_space_left() > 0:
                 # find the closest resource if it exists to this unit
                 closest_resource_tile, unit_positions = find_closest_resources(unit.pos, player, resource_tiles, unit_positions)
                 if closest_resource_tile is not None:
@@ -181,13 +196,10 @@ def agent(observation, configuration):
                     actions.append(action)
                 else:
                     closest_city_tile = find_closest_city_tile(unit.pos, player)
-                    if closest_city_tile is None:
-                        actions.append(unit.build_city())
-                    else:
-                        move_direction = unit.pos.direction_to(closest_city_tile.pos)
-                        action = unit.move(move_direction)
-                        unit_positions.append(unit.pos.translate(move_direction, 1))
-                        actions.append(action)
+                    move_direction = unit.pos.direction_to(closest_city_tile.pos)
+                    action = unit.move(move_direction)
+                    unit_positions.append(unit.pos.translate(move_direction, 1))
+                    actions.append(action)
             else:
                 lowest_fuel_city, lowest_fuel = get_city_with_least_fuel(player.cities)
                 if lowest_fuel_city is None:    # there are no CityTiles, should build one ASAP
@@ -203,7 +215,7 @@ def agent(observation, configuration):
                         actions.append(unit.build_city())
                     else:
                         actions.append(unit.move(pick_random_direction()))
-                elif should_build_another_citytile(player):
+                elif should_build_another_citytile(player, game_state.turn):
                     if unit.can_build(game_state.map):
                         actions.append(unit.build_city())
                     else:
@@ -235,7 +247,7 @@ def agent(observation, configuration):
     for city in player.cities.values():
         for city_tile in city.citytiles:
             if city_tile.can_act():
-                if city_can_build_cart_or_worker(player):
+                if city_can_build_cart_or_worker(player, game_state.turn):
                     actions.append(city_tile.build_worker())
                 else:
                     actions.append(city_tile.research())
